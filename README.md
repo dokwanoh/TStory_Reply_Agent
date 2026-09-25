@@ -21,7 +21,7 @@ uv run python -m reply_agent --help
 uv run python -m reply_agent status
 ```
 
-초기 상한은 댓글·공감·구독 각각 하루 5회, 같은 블로그 댓글 하루 1회입니다. `.local/state/STOP` 파일이 있으면 다음 행동 예약을 막습니다. 인증값·상태·댓글 기록은 `.local/`에만 저장합니다.
+초기 상한은 댓글·공감·구독 각각 하루 5회입니다. 댓글 중복은 게시글 단위로 판단하며, 같은 블로그라도 다른 게시글에는 댓글을 작성합니다. `.local/state/STOP` 파일이 있으면 다음 행동 예약을 막습니다. 인증값·상태·댓글 기록은 `.local/`에만 저장합니다.
 
 [검증 결과와 미검증 범위](VERIFICATION.md)를 확인하세요.
 

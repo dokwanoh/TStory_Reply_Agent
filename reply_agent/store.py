@@ -6,11 +6,11 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Final, assert_never, override
+from typing import Final, override
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
-from .models import Action, Attempt, Connection, Ledger, Receipt, Request
+from .models import Attempt, Connection, Ledger, Receipt, Request
 
 SEOUL: Final = ZoneInfo("Asia/Seoul")
 DAILY_LIMIT: Final = 5
@@ -60,7 +60,7 @@ def save(directory: Path, ledger: Ledger) -> None:
 
 
 def reserve(directory: Path, request: Request) -> Attempt:
-    """Reserve once, enforcing identity, per-blog spacing and daily budgets."""
+    """Reserve once, enforcing identity, action keys and daily budgets."""
     with locked(directory):
         if (directory / "STOP").exists():
             raise BlockedError("STOP file is present")
@@ -82,20 +82,6 @@ def reserve(directory: Path, request: Request) -> Attempt:
         ]
         if sum(item.request.action == request.action for item in today) >= DAILY_LIMIT:
             raise BlockedError("Daily action budget reached")
-        commented = any(
-            item.request.action == Action.COMMENT and item.request.blog == request.blog
-            for item in today
-        )
-        match request.action:
-            case Action.COMMENT:
-                if commented:
-                    raise BlockedError(
-                        "This blog already received a comment attempt today"
-                    )
-            case Action.LIKE | Action.SUBSCRIBE:
-                pass
-            case unreachable:
-                assert_never(unreachable)
         attempt = Attempt(id=uuid4(), created_at=now, request=request)
         save(directory, Ledger(attempts=(*ledger.attempts, attempt)))
         return attempt
