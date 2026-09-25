@@ -155,10 +155,12 @@ def finish(directory: Path, receipt: Receipt) -> None:
         completed = target.model_copy(update={"receipt": receipt})
         save(
             directory,
-            Ledger(
-                attempts=tuple(
-                    completed if item.id == target.id else item
-                    for item in ledger.attempts
-                )
+            ledger.model_copy(
+                update={
+                    "attempts": tuple(
+                        completed if item.id == target.id else item
+                        for item in ledger.attempts
+                    )
+                }
             ),
         )
