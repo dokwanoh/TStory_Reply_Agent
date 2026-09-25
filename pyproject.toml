@@ -1,0 +1,34 @@
+[project]
+name = "tstory-reply-agent"
+version = "0.1.0"
+description = "Durable action ledger for a Codex-operated Tistory agent"
+requires-python = ">=3.13"
+dependencies = ["pydantic>=2.12,<3", "typer>=0.16,<1"]
+
+[dependency-groups]
+dev = ["basedpyright>=1.31", "ruff>=0.13"]
+
+[tool.basedpyright]
+typeCheckingMode = "all"
+pythonVersion = "3.13"
+pythonPlatform = "Darwin"
+venvPath = "."
+venv = ".venv"
+include = ["reply_agent"]
+# Exhaustive match includes assert_never for future variants.
+reportUnnecessaryComparison = false
+
+[tool.ruff]
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = ["COM812", "D203", "D213", "CPY001", "D100", "D101", "D104", "D105", "D107"]
+
+[tool.ruff.lint.per-file-ignores]
+# These errors carry a typed reason or Pydantic error code, not raw Exception text.
+"reply_agent/models.py" = ["EM101"]
+"reply_agent/store.py" = ["EM101", "TRY003"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
