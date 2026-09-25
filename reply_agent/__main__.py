@@ -1,5 +1,6 @@
 """Run with uv run python -m reply_agent; this CLI does not drive a browser."""
 
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Final
 
@@ -7,7 +8,7 @@ import typer
 from pydantic import ValidationError
 
 from . import store
-from .models import Receipt, Request
+from .models import Receipt, Request, RunReceipt
 
 APP: Final = typer.Typer(pretty_exceptions_enable=False)
 DEFAULT_STATE: Final = Path(__file__).resolve().parents[1] / ".local" / "state"
@@ -26,6 +27,19 @@ def finish(receipt_file: Path, state: StateOption = DEFAULT_STATE) -> None:
     """Save visible confirmation or an uncertain outcome."""
     store.finish(state, Receipt.model_validate_json(receipt_file.read_text()))
     typer.echo("Recorded")
+
+
+@APP.command("run-start")
+def run_start(slot: datetime, state: StateOption = DEFAULT_STATE) -> None:
+    """Claim one scheduled slot before collecting or acting on candidates."""
+    typer.echo(store.start_run(state, slot).model_dump_json(indent=2))
+
+
+@APP.command("run-finish")
+def run_finish(receipt_file: Path, state: StateOption = DEFAULT_STATE) -> None:
+    """Close a slot with counts or an explicit exhaustion reason."""
+    store.finish_run(state, RunReceipt.model_validate_json(receipt_file.read_text()))
+    typer.echo("Run recorded")
 
 
 @APP.command()

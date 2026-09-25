@@ -11,12 +11,21 @@ from pydantic_core import PydanticCustomError
 
 MIN_COMMENT: Final = 20
 MAX_COMMENT: Final = 400
+RUN_TARGET: Final = 10
 
 
 class Action(StrEnum):
     COMMENT = "comment"
     LIKE = "like"
     SUBSCRIBE = "subscribe"
+
+
+class RunOutcome(StrEnum):
+    """Terminal state for one scheduled browser run."""
+
+    COMPLETED = "completed"
+    EXHAUSTED = "exhausted"
+    BLOCKED = "blocked"
 
 
 class FrozenModel(BaseModel):
@@ -38,6 +47,7 @@ class Request(FrozenModel):
     source: str = Field(pattern=r"^(popular|feed)$")
     source_evidence: str = Field(min_length=10)
     content: str = ""
+    run_id: UUID | None = None
 
     @model_validator(mode="after")
     def validate_target(self) -> Self:
@@ -101,3 +111,38 @@ class Attempt(FrozenModel):
 class Ledger(FrozenModel):
     version: int = Field(default=1, ge=1, le=1)
     attempts: tuple[Attempt, ...] = ()
+    runs: tuple["RunRecord", ...] = ()
+
+
+class RunRecord(FrozenModel):
+    """One claimed scheduler slot, closed only with a durable receipt."""
+
+    id: UUID
+    slot: datetime
+    started_at: datetime
+    receipt: "RunReceipt | None" = None
+
+
+class RunReceipt(FrozenModel):
+    """Required end-of-run evidence that prevents silent early exits."""
+
+    run_id: UUID
+    outcome: RunOutcome
+    confirmed_comments: int = Field(ge=0, le=10)
+    confirmed_likes: int = Field(ge=0, le=10)
+    confirmed_subscriptions: int = Field(ge=0, le=10)
+    stop_reason: str = Field(min_length=10)
+
+    @model_validator(mode="after")
+    def validate_outcome(self) -> Self:
+        """Require all targets unless the run explicitly records exhaustion."""
+        if self.outcome is RunOutcome.COMPLETED and min(
+            self.confirmed_comments,
+            self.confirmed_likes,
+            self.confirmed_subscriptions,
+        ) < RUN_TARGET:
+            raise PydanticCustomError(
+                "run_receipt",
+                "completed runs must reach all three targets",
+            )
+        return self
