@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 from .models import Attempt, Connection, Ledger, Receipt, Request
 
 SEOUL: Final = ZoneInfo("Asia/Seoul")
-DAILY_LIMIT: Final = 5
+DAILY_LIMIT: Final = 100
 
 
 class BlockedError(Exception):
