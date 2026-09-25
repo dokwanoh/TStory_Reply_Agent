@@ -20,6 +20,7 @@ from .models import (
     RunReceipt,
     RunRecord,
     RunTermination,
+    Visit,
 )
 
 SEOUL: Final = ZoneInfo("Asia/Seoul")
@@ -67,6 +68,33 @@ def save(directory: Path, ledger: Ledger) -> None:
         os.fsync(handle.fileno())
     temporary.chmod(0o600)
     _ = temporary.replace(directory / "ledger.json")
+
+
+def mark_visit(directory: Path, url: str) -> Visit:
+    """Record a candidate URL before the browser opens it."""
+    with locked(directory):
+        ledger = read(directory)
+        now = datetime.now(SEOUL)
+        today = now.date()
+        if any(
+            item.url == url and item.visited_at.astimezone(SEOUL).date() == today
+            for item in ledger.visits
+        ):
+            raise BlockedError("Article was already visited today")
+        visit = Visit(url=url, visited_at=now)
+        save(directory, ledger.model_copy(update={"visits": (*ledger.visits, visit)}))
+        return visit
+
+
+def visited_today(directory: Path, url: str) -> bool:
+    """Check today's visit ledger without opening the article."""
+    now = datetime.now(SEOUL).date()
+    with locked(directory):
+        ledger = read(directory)
+        return any(
+            item.url == url and item.visited_at.astimezone(SEOUL).date() == now
+            for item in ledger.visits
+        )
 
 
 def reserve(directory: Path, request: Request) -> Attempt:

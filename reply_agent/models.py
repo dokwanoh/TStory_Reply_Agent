@@ -104,6 +104,36 @@ class Request(FrozenModel):
                 assert_never(unreachable)
 
 
+class Candidate(FrozenModel):
+    """Article candidate collected from one approved Tistory source."""
+
+    url: str = Field(pattern=r"^https://[^/?#]+/.+")
+    source: str = Field(pattern=r"^(popular|feed)$")
+    source_evidence: str = Field(min_length=10)
+    unsubscribed: bool
+
+    @model_validator(mode="after")
+    def validate_url(self) -> Self:
+        """Require a canonical article URL without query or fragment."""
+        parsed = urlsplit(self.url)
+        if (
+            parsed.username
+            or parsed.password
+            or parsed.port
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise PydanticCustomError("candidate", "Candidate URL must be canonical")
+        return self
+
+
+class Visit(FrozenModel):
+    """A URL is recorded before opening so failed work is never retried today."""
+
+    url: str = Field(pattern=r"^https://[^/?#]+/.+")
+    visited_at: datetime
+
+
 class Receipt(FrozenModel):
     """Visible result used to close an attempted action."""
 
@@ -125,6 +155,7 @@ class Ledger(FrozenModel):
     version: int = Field(default=1, ge=1, le=1)
     attempts: tuple[Attempt, ...] = ()
     runs: tuple["RunRecord", ...] = ()
+    visits: tuple[Visit, ...] = ()
 
 
 class RunRecord(FrozenModel):
@@ -156,7 +187,8 @@ class RunReceipt(FrozenModel):
                 self.confirmed_comments,
                 self.confirmed_likes,
                 self.confirmed_subscriptions,
-            ) < RUN_TARGET
+            )
+            < RUN_TARGET
         ):
             raise PydanticCustomError(
                 "run_receipt",

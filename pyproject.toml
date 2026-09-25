@@ -29,6 +29,7 @@ ignore = ["COM812", "D203", "D213", "CPY001", "D100", "D101", "D104", "D105", "D
 # These errors carry a typed reason or Pydantic error code, not raw Exception text.
 "reply_agent/models.py" = ["EM101"]
 "reply_agent/store.py" = ["EM101", "TRY003"]
+"reply_agent/runner.py" = ["C901", "PLR0912"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"

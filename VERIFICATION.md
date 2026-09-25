@@ -15,6 +15,8 @@
 - 초기 `FrozenInstanceError` 재현 후 예외 클래스의 traceback 변경을 허용하도록 수정. 동일 재현 명령에서 정상 `BlockedError` 처리 확인.
 - 실제 게시 댓글의 재예약 CLI는 `Blocked: Action already reserved; automatic retry is forbidden`과 종료 코드 1 반환.
 - `ruff check`, `ruff format --check`, `basedpyright`: 통과.
+- `runner.execute` 임시 어댑터 스모크: 후보 10개에서 댓글·공감·구독 각 10건과 `target_reached` 종료 확인.
+- 프로필 불일치 어댑터 스모크: 브라우저 열기·행동 없이 `profile_mismatch`로 회차를 닫는 fail-closed 동작 확인.
 
 프로젝트에 기존 테스트 모음이 없어 프로젝트 지침에 따라 테스트 파일을 추가하지 않았다. 위 항목은 실제 CLI와 임시 디렉터리를 이용한 수동 검증이다.
 
@@ -31,7 +33,7 @@
 
 ## 남은 검증 범위
 
-- Codex 없이 실행되는 독립 브라우저 프로그램은 구현하지 않았다.
+- Codex 확장 연결을 Python에 제공하는 공식 로컬 API가 없어 독립 브라우저 프로그램은 구현하지 않았다. 따라서 실제 Chrome 탭 조작은 계속 Codex 전용 연결에서 수행해야 한다.
 - 예약 또는 상주 무인 실행은 설정하지 않았다.
 - 기존 게시봇과의 실제 동시 실행, 브라우저 재시작 뒤 로그인 유지, 장시간 운영은 미검증.
 - OMO의 실행 중인 LSP는 이전 가상환경 상태를 유지해 missing-import 진단을 내지만, 새 프로세스의 프로젝트 basedpyright는 0 errors. 다른 게시 프로젝트의 LSP를 건드리지 않았으며 현재 프로젝트를 다시 열 때 LSP 재확인이 필요하다.
