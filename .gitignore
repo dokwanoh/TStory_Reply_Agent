@@ -1,0 +1,24 @@
+# Machine-specific browser setup and authentication state
+BROWSER_SETUP.md
+.local/
+browser-profile/
+.browser-profile/
+storage-state*.json
+auth-state*.json
+.env
+.env.*
+!.env.example
+
+# Local execution artifacts and tools
+.artifacts/
+.codegraph
+logs/
+*.log
+*.sqlite
+*.sqlite-*
+.DS_Store
+.venv/
+__pycache__/
+.pytest_cache/
+node_modules/
+dist/
