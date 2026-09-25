@@ -28,6 +28,19 @@ class RunOutcome(StrEnum):
     BLOCKED = "blocked"
 
 
+class RunTermination(StrEnum):
+    """Machine-readable reason for closing a scheduled run."""
+
+    TARGET_REACHED = "target_reached"
+    CANDIDATES_EXHAUSTED = "candidates_exhausted"
+    DAILY_LIMIT = "daily_limit"
+    RESERVE_UNAVAILABLE = "reserve_unavailable"
+    PROFILE_MISMATCH = "profile_mismatch"
+    BROWSER_DISCONNECTED = "browser_disconnected"
+    CAPTCHA_OR_BLOCK = "captcha_or_block"
+    TOOL_ERROR = "tool_error"
+
+
 class FrozenModel(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True, extra="forbid")
 
@@ -132,15 +145,19 @@ class RunReceipt(FrozenModel):
     confirmed_likes: int = Field(ge=0, le=10)
     confirmed_subscriptions: int = Field(ge=0, le=10)
     stop_reason: str = Field(min_length=10)
+    termination: RunTermination | None = None
 
     @model_validator(mode="after")
     def validate_outcome(self) -> Self:
         """Require all targets unless the run explicitly records exhaustion."""
-        if self.outcome is RunOutcome.COMPLETED and min(
-            self.confirmed_comments,
-            self.confirmed_likes,
-            self.confirmed_subscriptions,
-        ) < RUN_TARGET:
+        if self.outcome is RunOutcome.COMPLETED and (
+            self.termination is not RunTermination.TARGET_REACHED
+            or min(
+                self.confirmed_comments,
+                self.confirmed_likes,
+                self.confirmed_subscriptions,
+            ) < RUN_TARGET
+        ):
             raise PydanticCustomError(
                 "run_receipt",
                 "completed runs must reach all three targets",

@@ -16,8 +16,10 @@ from .models import (
     Ledger,
     Receipt,
     Request,
+    RunOutcome,
     RunReceipt,
     RunRecord,
+    RunTermination,
 )
 
 SEOUL: Final = ZoneInfo("Asia/Seoul")
@@ -120,6 +122,25 @@ def start_run(directory: Path, slot: datetime) -> RunRecord:
 
 def finish_run(directory: Path, receipt: RunReceipt) -> None:
     """Close a scheduled run with its target counts and stop reason."""
+    if receipt.termination is None:
+        raise BlockedError("A machine-readable run termination is required")
+    if receipt.outcome is RunOutcome.COMPLETED and (
+        receipt.termination is not RunTermination.TARGET_REACHED
+    ):
+        raise BlockedError("Completed runs require target_reached termination")
+    if receipt.outcome is RunOutcome.EXHAUSTED and receipt.termination not in {
+        RunTermination.CANDIDATES_EXHAUSTED,
+        RunTermination.DAILY_LIMIT,
+    }:
+        raise BlockedError("Exhausted runs require candidate or limit evidence")
+    if receipt.outcome is RunOutcome.BLOCKED and receipt.termination not in {
+        RunTermination.RESERVE_UNAVAILABLE,
+        RunTermination.PROFILE_MISMATCH,
+        RunTermination.BROWSER_DISCONNECTED,
+        RunTermination.CAPTCHA_OR_BLOCK,
+        RunTermination.TOOL_ERROR,
+    }:
+        raise BlockedError("Blocked runs require a verified blocking reason")
     with locked(directory):
         ledger = read(directory)
         target = next((item for item in ledger.runs if item.id == receipt.run_id), None)
