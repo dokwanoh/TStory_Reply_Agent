@@ -26,15 +26,23 @@ CLI는 상태 기록 도구이며 브라우저를 직접 조작하지 않는다.
 ```sh
 uv run python -m reply_agent --help
 uv run python -m reply_agent status
-uv run python -m reply_agent run-start <slot-iso>
+uv run python -m reply_agent run-start <slot> .local/targets.json
 uv run python -m reply_agent reserve .local/request.json
 uv run python -m reply_agent finish .local/receipt.json
 uv run python -m reply_agent run-finish .local/run-receipt.json
 ```
 
-`uv`가 PATH에 없으면 이 기기에 설치된 `.local/tools/uv-aarch64-apple-darwin/uv`를 사용할 수 있다. `<slot-iso>`는 해당 회차를 식별하는 실제 시간이며 예시 문자열을 그대로 실행하지 않는다.
+`uv`가 PATH에 없으면 이 기기에 설치된 `.local/tools/uv-aarch64-apple-darwin/uv`를 사용할 수 있다. `<slot>`은 해당 회차를 식별하는 실제 한국 시간이다. 현재 CLI가 받는 `YYYY-MM-DDTHH:MM:SS` 형식을 사용하며 예시 문자열을 그대로 실행하지 않는다.
 
-1. 아래 회차 기록 제약과 현재 요청의 종료 조건을 먼저 확인한다. `run-start`로 회차를 등록하고 성공해야 행동을 예약할 수 있다. 실패하면 입력·클릭하지 않는다.
+`.local/targets.json`에는 사용자 요청에 맞는 목표를 모두 명시한다. 승인된 댓글 한 건만 게시할 때의 예:
+
+```json
+{"comments": 1, "likes": 0, "subscriptions": 0}
+```
+
+각 값은 0 이상의 정수이고 적어도 하나는 양수여야 한다. 0인 행동은 제외한다. 목표 파일을 생략하거나 값을 모두 0으로 지정하면 회차를 생성하지 않는다. 초안 작성만 필요하면 회차를 시작하지 않는다.
+
+1. 요청한 범위에 맞는 목표를 정해 `run-start`로 저장하고 성공해야 행동을 예약할 수 있다. 목표에 도달한 항목은 추가 예약하지 못한다. 실패하면 입력·클릭하지 않는다.
 2. `Request`의 `connection`, `action`, canonical `url`, `source`, `source_evidence`, `content`, `run_id`를 실제 관찰에 근거해 작성한다. `action`은 `comment`, `like`, `subscribe`; `source`는 `popular`, `feed`다. 댓글 외 `content`는 빈 문자열이다. `run_id`는 등록 결과의 UUID다.
 3. 각 행동별 `reserve` 성공 뒤 해당 행동을 한 번만 실행한다. 기존 코드의 일일 각 100회 예약 한도를 유지한다. 미확인 시도도 중복 방지와 한도에 포함된다. 예약이 거절되면 기록을 삭제하거나 다른 경로로 우회하지 않는다.
 4. 댓글 입력값을 확인한 뒤 등록한다. 결과 목록에 내 계정과 정확한 본문이 함께 보여야 confirmed다. 공감은 활성 표시, 구독은 `구독중` 등 실제 상태 변화를 확인한다. 클릭 성공이나 카운트 증가만으로 게시 완료라고 하지 않는다.
@@ -42,11 +50,13 @@ uv run python -m reply_agent run-finish .local/run-receipt.json
 6. 로그인 만료, CAPTCHA, 서비스 차단, 전용 연결 불일치에는 멈추고 실제 이유를 보고한다. 다른 계정·프로필로 우회하지 않는다.
 7. 회차 결과는 `run-finish`로 기록하고 열린 회차를 남기지 않는다. 완료 수는 이번 회차의 confirmed 행동만 집계한다. 사용자에게 처리 URL별 댓글·공감·신규 구독과 건너뛴 이유를 보고한다.
 
-## 회차 기록 제약
+## 회차 완료 판정
 
-현재 `RunReceipt`는 각 항목 10건을 `completed`/`target_reached` 조건으로 고정한다. `exhausted`는 실제 후보 소진 또는 일일 한도, `blocked`는 검증된 연결·프로필·도구 오류 또는 CAPTCHA·서비스 차단을 나타낸다. 모델 제한 사유인 `reserve_unavailable`은 과거 기록 호환용이며 현재 모델을 이유로 사용하지 않는다.
+`completed`/`target_reached`는 시작 시 저장한 각 항목 목표를 충족했을 때 사용한다. 댓글 1건만 요청했다면 댓글 1·공감 0·구독 0으로 완료할 수 있고, 결과 숫자의 10건 상한도 없다. 완료 숫자는 반드시 해당 회차의 실제 confirmed 행동 영수증과 일치해야 한다. 목표 미달, 부풀린 숫자 또는 아직 영수증이 없는 시도가 있으면 완료를 거절한다. `exhausted`는 실제 후보 소진 또는 일일 한도, `blocked`는 검증된 연결·프로필·도구 오류 또는 CAPTCHA·서비스 차단을 나타낸다.
 
-이 구조에는 `한 댓글만 게시`처럼 작은 수동 목표 달성을 나타내는 별도 종료 코드가 없다. 현재 요청에 맞는 정직한 종료 기록을 만들 수 없는 경우 회차 시작 전에 이 구현 불일치를 해결해야 한다. 목표에 맞지 않는 `completed`, 허위 후보 소진·오류를 넣거나 요청을 10건으로 확대해 맞추지 않는다. 이 문서 정비만으로 해당 코드 제약이 해소되거나 무인 실행이 검증된 것은 아니다.
+과거 목표 필드가 없는 종료 기록은 그대로 읽는다. 목표가 없는 열린 회차는 새 행동 예약이나 `completed` 처리를 허용하지 않으므로 기록을 임의로 바꿔 통과시키지 않는다. `reserve_unavailable`은 과거 기록 호환용이며 현재 모델을 이유로 사용하지 않는다. 목표 숫자를 채우려고 사용자 요청 범위를 확대하거나 확인되지 않은 결과를 성공으로 기록하지 않는다.
+
+Python 호출자는 `store.start_run(directory, slot, RunTargets(...))`를 사용한다. `runner.execute`에는 `RunPlan(connection, slot, candidates, targets)`를 전달하며 서명은 `execute(directory, plan, adapter)`이다. 목표가 0이거나 이미 충족된 행동은 실행하지 않고, 나머지 목표에 도달하면 추가 후보를 열지 않는다.
 
 ## 브라우저와 기록 원칙
 

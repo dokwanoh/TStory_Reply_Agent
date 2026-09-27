@@ -11,7 +11,6 @@ from pydantic_core import PydanticCustomError
 
 MIN_COMMENT: Final = 20
 MAX_COMMENT: Final = 400
-RUN_TARGET: Final = 10
 
 
 class Action(StrEnum):
@@ -43,6 +42,33 @@ class RunTermination(StrEnum):
 
 class FrozenModel(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True, extra="forbid")
+
+
+class RunTargets(FrozenModel):
+    """Explicit per-action goals; zero excludes an action from this run."""
+
+    comments: int = Field(ge=0, strict=True)
+    likes: int = Field(ge=0, strict=True)
+    subscriptions: int = Field(ge=0, strict=True)
+
+    @model_validator(mode="after")
+    def validate_targets(self) -> Self:
+        """Reject an empty execution request before claiming a slot."""
+        if self.comments + self.likes + self.subscriptions == 0:
+            raise PydanticCustomError("run_targets", "At least one target is required")
+        return self
+
+    def for_action(self, action: Action) -> int:
+        """Return the declared goal for one action."""
+        match action:
+            case Action.COMMENT:
+                return self.comments
+            case Action.LIKE:
+                return self.likes
+            case Action.SUBSCRIBE:
+                return self.subscriptions
+            case unreachable:
+                assert_never(unreachable)
 
 
 class Connection(FrozenModel):
@@ -164,6 +190,7 @@ class RunRecord(FrozenModel):
     id: UUID
     slot: datetime
     started_at: datetime
+    targets: RunTargets | None = None
     receipt: "RunReceipt | None" = None
 
 
@@ -172,26 +199,41 @@ class RunReceipt(FrozenModel):
 
     run_id: UUID
     outcome: RunOutcome
-    confirmed_comments: int = Field(ge=0, le=10)
-    confirmed_likes: int = Field(ge=0, le=10)
-    confirmed_subscriptions: int = Field(ge=0, le=10)
+    confirmed_comments: int = Field(ge=0)
+    confirmed_likes: int = Field(ge=0)
+    confirmed_subscriptions: int = Field(ge=0)
     stop_reason: str = Field(min_length=10)
     termination: RunTermination | None = None
 
     @model_validator(mode="after")
     def validate_outcome(self) -> Self:
-        """Require all targets unless the run explicitly records exhaustion."""
-        if self.outcome is RunOutcome.COMPLETED and (
-            self.termination is not RunTermination.TARGET_REACHED
-            or min(
-                self.confirmed_comments,
-                self.confirmed_likes,
-                self.confirmed_subscriptions,
-            )
-            < RUN_TARGET
-        ):
-            raise PydanticCustomError(
-                "run_receipt",
-                "completed runs must reach all three targets",
-            )
+        """Check completion semantics; persisted goals are checked by the store."""
+        match self.outcome:
+            case RunOutcome.COMPLETED:
+                if self.termination is not RunTermination.TARGET_REACHED:
+                    raise PydanticCustomError(
+                        "run_receipt", "completed runs require target_reached"
+                    )
+            case RunOutcome.EXHAUSTED:
+                if self.termination is not None and self.termination not in {
+                    RunTermination.CANDIDATES_EXHAUSTED,
+                    RunTermination.DAILY_LIMIT,
+                }:
+                    raise PydanticCustomError(
+                        "run_receipt",
+                        "exhausted runs require candidate or limit evidence",
+                    )
+            case RunOutcome.BLOCKED:
+                if self.termination is not None and self.termination not in {
+                    RunTermination.RESERVE_UNAVAILABLE,
+                    RunTermination.PROFILE_MISMATCH,
+                    RunTermination.BROWSER_DISCONNECTED,
+                    RunTermination.CAPTCHA_OR_BLOCK,
+                    RunTermination.TOOL_ERROR,
+                }:
+                    raise PydanticCustomError(
+                        "run_receipt", "blocked runs require a verified blocking reason"
+                    )
+            case unreachable:
+                assert_never(unreachable)
         return self

@@ -8,7 +8,6 @@ from uuid import UUID
 
 from . import store
 from .models import (
-    RUN_TARGET,
     Action,
     Candidate,
     Connection,
@@ -16,6 +15,7 @@ from .models import (
     Request,
     RunOutcome,
     RunReceipt,
+    RunTargets,
     RunTermination,
 )
 
@@ -119,27 +119,33 @@ def _record_action(context: ActionContext, action: Action, content: str) -> bool
     return observation.outcome == "confirmed"
 
 
-def execute(
-    directory: Path,
-    connection: Connection,
-    slot: datetime,
-    candidates: list[Candidate],
-    adapter: BrowserAdapter,
-) -> RunReceipt:
+@dataclass(frozen=True, slots=True)
+class RunPlan:
+    """Approved candidate scope and goals for one execution."""
+
+    connection: Connection
+    slot: datetime
+    candidates: tuple[Candidate, ...]
+    targets: RunTargets
+
+
+def execute(directory: Path, plan: RunPlan, adapter: BrowserAdapter) -> RunReceipt:
     """Run candidates until all targets, exhaustion, or a hard stop is proven."""
-    run = store.start_run(directory, slot)
+    run = store.start_run(directory, plan.slot, plan.targets)
     counts = {Action.COMMENT: 0, Action.LIKE: 0, Action.SUBSCRIBE: 0}
     termination = RunTermination.CANDIDATES_EXHAUSTED
     outcome = RunOutcome.EXHAUSTED
     reason = "All approved candidates were visited without reaching every target"
     try:
-        adapter.verify_connection(connection)
-        for candidate in candidates:
-            if min(counts.values()) >= RUN_TARGET:
+        adapter.verify_connection(plan.connection)
+        for candidate in plan.candidates:
+            if all(
+                counts[action] >= plan.targets.for_action(action) for action in Action
+            ):
                 termination, outcome, reason = (
                     RunTermination.TARGET_REACHED,
                     RunOutcome.COMPLETED,
-                    "All three action targets reached",
+                    "All requested action targets reached",
                 )
                 break
             if store.visited_today(directory, candidate.url):
@@ -152,21 +158,23 @@ def execute(
                 (Action.COMMENT, _comment(page)),
             )
             for action, content in actions:
-                if counts[action] >= RUN_TARGET or (
+                if counts[action] >= plan.targets.for_action(action) or (
                     action is Action.COMMENT and not content
                 ):
                     continue
                 context = ActionContext(
-                    directory, candidate, connection, run.id, adapter
+                    directory, candidate, plan.connection, run.id, adapter
                 )
                 if _record_action(context, action, content):
                     counts[action] += 1
         else:
-            if min(counts.values()) >= RUN_TARGET:
+            if all(
+                counts[action] >= plan.targets.for_action(action) for action in Action
+            ):
                 termination, outcome, reason = (
                     RunTermination.TARGET_REACHED,
                     RunOutcome.COMPLETED,
-                    "All three action targets reached",
+                    "All requested action targets reached",
                 )
             else:
                 termination, outcome = (

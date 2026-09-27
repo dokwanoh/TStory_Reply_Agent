@@ -6,11 +6,12 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Final, override
+from typing import Final, assert_never, override
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 from .models import (
+    Action,
     Attempt,
     Connection,
     Ledger,
@@ -19,7 +20,7 @@ from .models import (
     RunOutcome,
     RunReceipt,
     RunRecord,
-    RunTermination,
+    RunTargets,
     Visit,
 )
 
@@ -113,10 +114,21 @@ def reserve(directory: Path, request: Request) -> Attempt:
         run = next((item for item in ledger.runs if item.id == request.run_id), None)
         if run is None or run.receipt is not None:
             raise BlockedError("Scheduled run is missing or already closed")
+        if run.targets is None:
+            raise BlockedError("Legacy run has no declared targets")
         if any(item.receipt is None for item in ledger.attempts):
             raise BlockedError("Pending action: inspect the browser before continuing")
         if any(item.request.key == request.key for item in ledger.attempts):
             raise BlockedError("Action already reserved; automatic retry is forbidden")
+        confirmed = sum(
+            item.request.run_id == run.id
+            and item.request.action == request.action
+            and item.receipt is not None
+            and item.receipt.outcome == "confirmed"
+            for item in ledger.attempts
+        )
+        if confirmed >= run.targets.for_action(request.action):
+            raise BlockedError("Run action target already reached or excluded")
         now = datetime.now(SEOUL)
         today = [
             item
@@ -133,8 +145,8 @@ def reserve(directory: Path, request: Request) -> Attempt:
         return attempt
 
 
-def start_run(directory: Path, slot: datetime) -> RunRecord:
-    """Claim one scheduled slot before any browser action is reserved."""
+def start_run(directory: Path, slot: datetime, targets: RunTargets) -> RunRecord:
+    """Persist explicit goals before any browser action is reserved."""
     with locked(directory):
         if (directory / "STOP").exists():
             raise BlockedError("STOP file is present")
@@ -143,7 +155,9 @@ def start_run(directory: Path, slot: datetime) -> RunRecord:
             raise BlockedError("Previous scheduled run is still open")
         if any(item.slot == slot for item in ledger.runs):
             raise BlockedError("Scheduled slot already recorded")
-        run = RunRecord(id=uuid4(), slot=slot, started_at=datetime.now(SEOUL))
+        run = RunRecord(
+            id=uuid4(), slot=slot, started_at=datetime.now(SEOUL), targets=targets
+        )
         save(directory, ledger.model_copy(update={"runs": (*ledger.runs, run)}))
         return run
 
@@ -152,23 +166,6 @@ def finish_run(directory: Path, receipt: RunReceipt) -> None:
     """Close a scheduled run with its target counts and stop reason."""
     if receipt.termination is None:
         raise BlockedError("A machine-readable run termination is required")
-    if receipt.outcome is RunOutcome.COMPLETED and (
-        receipt.termination is not RunTermination.TARGET_REACHED
-    ):
-        raise BlockedError("Completed runs require target_reached termination")
-    if receipt.outcome is RunOutcome.EXHAUSTED and receipt.termination not in {
-        RunTermination.CANDIDATES_EXHAUSTED,
-        RunTermination.DAILY_LIMIT,
-    }:
-        raise BlockedError("Exhausted runs require candidate or limit evidence")
-    if receipt.outcome is RunOutcome.BLOCKED and receipt.termination not in {
-        RunTermination.RESERVE_UNAVAILABLE,
-        RunTermination.PROFILE_MISMATCH,
-        RunTermination.BROWSER_DISCONNECTED,
-        RunTermination.CAPTCHA_OR_BLOCK,
-        RunTermination.TOOL_ERROR,
-    }:
-        raise BlockedError("Blocked runs require a verified blocking reason")
     with locked(directory):
         ledger = read(directory)
         target = next((item for item in ledger.runs if item.id == receipt.run_id), None)
@@ -176,6 +173,35 @@ def finish_run(directory: Path, receipt: RunReceipt) -> None:
             raise BlockedError("Unknown scheduled run ID")
         if target.receipt is not None:
             raise BlockedError("Scheduled run already closed")
+        attempts = [x for x in ledger.attempts if x.request.run_id == target.id]
+        counts = tuple(
+            sum(
+                x.request.action == action
+                and x.receipt is not None
+                and x.receipt.outcome == "confirmed"
+                for x in attempts
+            )
+            for action in Action
+        )
+        if counts != (
+            receipt.confirmed_comments,
+            receipt.confirmed_likes,
+            receipt.confirmed_subscriptions,
+        ):
+            raise BlockedError("Run counts do not match confirmed action receipts")
+        match receipt.outcome:
+            case RunOutcome.COMPLETED:
+                if target.targets is None:
+                    raise BlockedError("Legacy run has no declared targets")
+                if any(x.receipt is None for x in attempts) or any(
+                    count < target.targets.for_action(action)
+                    for action, count in zip(Action, counts, strict=True)
+                ):
+                    raise BlockedError("Declared run targets have not been confirmed")
+            case RunOutcome.EXHAUSTED | RunOutcome.BLOCKED:
+                pass
+            case unreachable:
+                assert_never(unreachable)
         completed = target.model_copy(update={"receipt": receipt})
         save(
             directory,

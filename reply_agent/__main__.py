@@ -8,7 +8,7 @@ import typer
 from pydantic import ValidationError
 
 from . import store
-from .models import Receipt, Request, RunReceipt
+from .models import Receipt, Request, RunReceipt, RunTargets
 
 APP: Final = typer.Typer(pretty_exceptions_enable=False)
 DEFAULT_STATE: Final = Path(__file__).resolve().parents[1] / ".local" / "state"
@@ -30,9 +30,12 @@ def finish(receipt_file: Path, state: StateOption = DEFAULT_STATE) -> None:
 
 
 @APP.command("run-start")
-def run_start(slot: datetime, state: StateOption = DEFAULT_STATE) -> None:
-    """Claim one scheduled slot before collecting or acting on candidates."""
-    typer.echo(store.start_run(state, slot).model_dump_json(indent=2))
+def run_start(
+    slot: datetime, targets_file: Path, state: StateOption = DEFAULT_STATE
+) -> None:
+    """Claim a slot with explicit comment, like, and subscription goals."""
+    targets = RunTargets.model_validate_json(targets_file.read_text())
+    typer.echo(store.start_run(state, slot, targets).model_dump_json(indent=2))
 
 
 @APP.command("run-finish")
