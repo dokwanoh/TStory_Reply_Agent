@@ -83,7 +83,7 @@ class Request(FrozenModel):
     connection: Connection
     action: Action
     url: str = Field(pattern=r"^https://[^/?#]+/.+")
-    source: str = Field(pattern=r"^(popular|feed)$")
+    source: str = Field(pattern=r"^(popular|feed|search)$")
     source_evidence: str = Field(min_length=10)
     content: str = ""
     run_id: UUID | None = None
@@ -134,7 +134,7 @@ class Candidate(FrozenModel):
     """Article candidate collected from one approved Tistory source."""
 
     url: str = Field(pattern=r"^https://[^/?#]+/.+")
-    source: str = Field(pattern=r"^(popular|feed)$")
+    source: str = Field(pattern=r"^(popular|feed|search)$")
     source_evidence: str = Field(min_length=10)
     unsubscribed: bool
 
