@@ -198,7 +198,7 @@ def finish_run(directory: Path, receipt: RunReceipt) -> None:
                     for action, count in zip(Action, counts, strict=True)
                 ):
                     raise BlockedError("Declared run targets have not been confirmed")
-            case RunOutcome.EXHAUSTED | RunOutcome.BLOCKED:
+            case RunOutcome.EXHAUSTED | RunOutcome.BLOCKED | RunOutcome.CANCELLED:
                 pass
             case unreachable:
                 assert_never(unreachable)

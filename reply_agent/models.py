@@ -25,6 +25,7 @@ class RunOutcome(StrEnum):
     COMPLETED = "completed"
     EXHAUSTED = "exhausted"
     BLOCKED = "blocked"
+    CANCELLED = "cancelled"
 
 
 class RunTermination(StrEnum):
@@ -38,6 +39,7 @@ class RunTermination(StrEnum):
     BROWSER_DISCONNECTED = "browser_disconnected"
     CAPTCHA_OR_BLOCK = "captcha_or_block"
     TOOL_ERROR = "tool_error"
+    EXECUTION_STOPPED = "execution_stopped"
 
 
 class FrozenModel(BaseModel):
@@ -233,6 +235,12 @@ class RunReceipt(FrozenModel):
                 }:
                     raise PydanticCustomError(
                         "run_receipt", "blocked runs require a verified blocking reason"
+                    )
+            case RunOutcome.CANCELLED:
+                if self.termination is not RunTermination.EXECUTION_STOPPED:
+                    raise PydanticCustomError(
+                        "run_receipt",
+                        "cancelled runs require execution_stopped",
                     )
             case unreachable:
                 assert_never(unreachable)
