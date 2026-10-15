@@ -1,0 +1,6 @@
+interface:
+  display_name: "티스토리 확산 실행"
+  short_description: "전용 프로필에서 본문을 읽고 댓글·구독·공감을 순서대로 실행"
+  default_prompt: "미구독 인기글 확산을 $tistory-engagement 규칙으로 이어가줘."
+policy:
+  allow_implicit_invocation: true

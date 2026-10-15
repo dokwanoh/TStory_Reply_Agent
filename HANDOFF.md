@@ -1,3 +1,22 @@
+# 티스토리 확산봇 인계
+
+## 현재 기준 (2026-10-15)
+
+실행은 [tistory-engagement](skills/tistory-engagement/SKILL.md), 복구는 [tistory-engagement-recovery](skills/tistory-engagement-recovery/SKILL.md), 종료 요약과 조회는 [tistory-engagement-report](skills/tistory-engagement-report/SKILL.md)를 읽는다. 명령어는 [RUNBOOK.md](RUNBOOK.md)를 따른다.
+
+- 전용 Chrome 프로필과 계정·기존 원장을 먼저 확인한다.
+- 같은 글에서 **댓글 → 구독 → 공감** 순서로 진행한다.
+- 소감 한 문장을 친근하고 정겹고 자연스러운 MZ 말투로 쓴다. 최초 미구독이면 `자주 교류해요~`를 붙인다.
+- 한 바퀴는 동일 글의 세 행동이 모두 새로 confirmed인 경우다.
+- 같은 작업 3회 연속 실패는 이전 작업기를 멈추고 새 실행 문맥에서 같은 run과 원장으로 재개한다. 미확인 전송은 재시도하지 않는다.
+- 완료·중단·인계 때 원본 원장을 보존하고 Markdown·JSON 요약을 남긴다.
+
+재개 시 실제 비공개 원장을 조회한다. 이 문서의 과거 숫자나 계정 연결 상태를 현재 상태로 재사용하지 않는다.
+
+## 아래는 과거 실행 기록
+
+아래 날짜별 기록은 당시의 관찰을 보존한 이력이다. 과거의 ‘인기글+피드 두 글 = 한 바퀴’, 고정 문구 미삽입, 실행 순서와 종료 방식은 현재 스킬 규칙으로 대체됐다. 개별 과거 실적을 새 실적으로 합산하지 않는다.
+
 # 모델 교체 후 티스토리 작업 이어가기
 
 ## 현재 승인과 작업 범위

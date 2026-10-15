@@ -1,0 +1,6 @@
+interface:
+  display_name: "티스토리 확산 보고"
+  short_description: "원장의 실제 댓글과 링크·완료 수·미확인·남은 작업을 요약"
+  default_prompt: "$tistory-engagement-report로 이번 확산의 완료 수와 댓글·링크를 보여줘."
+policy:
+  allow_implicit_invocation: true

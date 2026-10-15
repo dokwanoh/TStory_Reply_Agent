@@ -1,0 +1,6 @@
+interface:
+  display_name: "티스토리 확산 복구"
+  short_description: "전용 프로필·계정 확인과 3회 실패 후 같은 원장으로 작업기 인계"
+  default_prompt: "$tistory-engagement-recovery로 연결과 원장을 확인하고 중단 작업을 복구해줘."
+policy:
+  allow_implicit_invocation: true

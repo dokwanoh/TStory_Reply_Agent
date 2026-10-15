@@ -9,7 +9,9 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic_core import PydanticCustomError
 
-MIN_COMMENT: Final = 20
+from .workflow import ArticleRecord, ExecutionSession, FailureEvent
+
+MIN_COMMENT: Final = 1
 MAX_COMMENT: Final = 400
 
 
@@ -52,12 +54,23 @@ class RunTargets(FrozenModel):
     comments: int = Field(ge=0, strict=True)
     likes: int = Field(ge=0, strict=True)
     subscriptions: int = Field(ge=0, strict=True)
+    loops: int | None = Field(default=None, gt=0, strict=True)
+    unsubscribed_only: bool = False
+    source: str | None = Field(default=None, pattern=r"^(popular|feed|search)$")
 
     @model_validator(mode="after")
     def validate_targets(self) -> Self:
         """Reject an empty execution request before claiming a slot."""
         if self.comments + self.likes + self.subscriptions == 0:
             raise PydanticCustomError("run_targets", "At least one target is required")
+        if self.loops is not None and (
+            self.comments != self.loops
+            or self.likes != self.loops
+            or self.subscriptions != self.loops
+        ):
+            raise PydanticCustomError(
+                "loop_targets", "All three targets must equal loops"
+            )
         return self
 
     def for_action(self, action: Action) -> int:
@@ -89,6 +102,7 @@ class Request(FrozenModel):
     source_evidence: str = Field(min_length=10)
     content: str = ""
     run_id: UUID | None = None
+    session_id: UUID | None = None
 
     @model_validator(mode="after")
     def validate_target(self) -> Self:
@@ -103,7 +117,7 @@ class Request(FrozenModel):
         match self.action:
             case Action.COMMENT:
                 if not MIN_COMMENT <= len(self.content.strip()) <= MAX_COMMENT:
-                    raise PydanticCustomError("comment", "Comment must be 20-400 chars")
+                    raise PydanticCustomError("comment", "Comment must be 1-400 chars")
                 if "http" in self.content or "맞구독" in self.content:
                     raise PydanticCustomError(
                         "comment", "Promotional links are excluded"
@@ -160,13 +174,15 @@ class Visit(FrozenModel):
 
     url: str = Field(pattern=r"^https://[^/?#]+/.+")
     visited_at: datetime
+    run_id: UUID | None = None
+    reason: str = ""
 
 
 class Receipt(FrozenModel):
     """Visible result used to close an attempted action."""
 
     attempt_id: UUID
-    outcome: str = Field(pattern=r"^(confirmed|uncertain)$")
+    outcome: str = Field(pattern=r"^(confirmed|uncertain|not_submitted)$")
     evidence: str = Field(min_length=10)
 
 
@@ -184,6 +200,9 @@ class Ledger(FrozenModel):
     attempts: tuple[Attempt, ...] = ()
     runs: tuple["RunRecord", ...] = ()
     visits: tuple[Visit, ...] = ()
+    articles: tuple[ArticleRecord, ...] = ()
+    sessions: tuple[ExecutionSession, ...] = ()
+    failures: tuple[FailureEvent, ...] = ()
 
 
 class RunRecord(FrozenModel):
@@ -194,6 +213,7 @@ class RunRecord(FrozenModel):
     started_at: datetime
     targets: RunTargets | None = None
     receipt: "RunReceipt | None" = None
+    policy_version: int = Field(default=1, ge=1, le=2)
 
 
 class RunReceipt(FrozenModel):
